@@ -61,6 +61,7 @@ automatically undefines more recent features, see :filelink:`SEAICE_OPTIONS.h
    :varlink:`SEAICE_DEBUG`, #undef, enhance STDOUT for debugging
    :varlink:`SEAICE_CGRID`, #define, use sea ice dynamics on C-grid
    :varlink:`SEAICE_ALLOW_EVP`, #define, enable use of EVP rheology solver
+   :varlink:`SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ`, #undef, include the fixed-point adjoint of the mEVP subcycle loop (adjoint builds only; see :numref:`para_phys_pkg_seaice_EVPfixedpointadj`)
    :varlink:`SEAICE_ALLOW_JFNK`, #define, enable use of JFNK rheology solver
    :varlink:`SEAICE_ALLOW_KRYLOV`, #define, enable use of Krylov rheology solver
    :varlink:`SEAICE_ALLOW_TEM`, #undef, enable use of the truncated ellipse method (TEM) and coulombic yield curve
@@ -1257,6 +1258,118 @@ Because of the C-grid staggering of velocities and
 stresses, mEVP may not converge as successfully as in Kimmritz et al. (2015)
 :cite:`kimmritz:15`, see also Kimmritz et al. (2016) :cite:`kimmritz:16`.
 Convergence at very high resolution (order 5 km) has not yet been studied.
+
+.. _para_phys_pkg_seaice_EVPfixedpointadj:
+
+Fixed-point adjoint of the mEVP subcycle loop
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The adjoint that TAF or Tapenade generate for mEVP differentiates every
+subcycle of the loop (:varlink:`SEAICEnEVPstarSteps` of them per time step).
+This exact adjoint of the iteration can grow without bound: with mEVP in the
+``global_ocean.cs32x15`` adjoint test (120 subcycles, :math:`\alpha = \beta =
+250`), the Tapenade gradient reaches :math:`10^{66}` after 10 days and NaN after
+30 days. As an alternative, the adjoint of the subcycle loop can be replaced by
+a hand-written fixed-point adjoint (Danilov and Koldunov, in prep.).
+
+**Method.** Let :math:`x` be the state that the loop carries (ice velocities,
+stresses, strain rates, viscosities, drag coefficient, forcing), :math:`p` its
+inputs (ice mass, strength, forcing, ocean velocity, the velocity of the
+previous time step), and :math:`x_N` the state after the last subcycle. The
+adjoint of the loop is computed with one *modified* subcycle
+:math:`F(x, p)` taken at :math:`x_N`. :math:`F` has the same value as a
+subcycle at :math:`x_N`, but a derivative that makes the transposed iteration
+contract:
+
+- the viscosities depend on :math:`\Delta` only with the weight
+  :math:`\theta` (:varlink:`SEAICE_fpTheta`), and not at all
+  (:varlink:`SEAICE_fpThetaRigid`) where :math:`\Delta` is smaller than
+  :varlink:`SEAICE_fpRigidDelta`; the replacement pressure uses the frozen
+  :math:`\Delta`;
+- :math:`\alpha` and :math:`\beta` are raised by a factor
+  :math:`\max(1, \sqrt{s/\kappa_0})` where the pseudo-time step would be
+  unstable (:varlink:`SEAICE_fpRaise`, :varlink:`SEAICE_fpKappa0`);
+- the ice-ocean drag coefficient is frozen where the ice is thin
+  (:varlink:`SEAICE_fpThinArea`, :varlink:`SEAICE_fpThinMass`).
+
+The adjoint :math:`\lambda` of the loop's output is then iterated
+:varlink:`SEAICEnEVPstarSteps` times with relaxation :math:`\omega`
+(:varlink:`SEAICE_fpOmega`),
+
+.. math::
+   \lambda \leftarrow (1-\omega)\,\lambda + \omega\,
+   \left(\frac{\partial F}{\partial x}\right)^{T} \lambda ,
+
+and :math:`\omega \left(\partial F/\partial p\right)^{T}\lambda`, summed
+over the iterations, is added to the adjoint of the inputs. The adjoint of the
+halo exchange at the end of each subcycle is applied separately
+(:varlink:`SEAICE_fpExchAdj`). Since the AD tools do not pass the loop's output
+to a hand-written adjoint, :math:`x_N` is recomputed by running the loop again
+from its input. The forward model is not changed.
+
+**Use.** Define :varlink:`SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ` in
+:filelink:`SEAICE_OPTIONS.h <pkg/seaice/SEAICE_OPTIONS.h>` and set
+:varlink:`SEAICEuseEVPfixedPointAdj` ``= .TRUE.,`` in ``data.seaice``. Only the
+adjoint is affected; the tangent linear model always uses the AD tool's
+derivative of the loop. Each call of the adjoint prints one line with the
+largest :math:`|\lambda|` on entry and on exit
+(``SEAICE_EVP_FPADJ: ... max|lam| in, out, out/in``), which can be used to
+monitor the adjoint. The hooks are:
+
+- TAF: the ``ADNAME`` directive in :filelink:`seaice.flow <pkg/seaice/seaice.flow>`
+  and :filelink:`seaice_evp_subcycles_fpadj_mad.F <pkg/seaice/seaice_evp_subcycles_fpadj_mad.F>`;
+- Tapenade: the entry of ``seaice_evp_subcycles_fpadj`` in
+  :filelink:`tools/TAP_support/flow_tap` and
+  :filelink:`seaice_evp_subcycles_fpadj_tap.F <pkg/seaice/seaice_evp_subcycles_fpadj_tap.F>`.
+
+The argument list of the routine that the AD tool calls follows the activity
+of the arguments at the call (an active argument is followed by its adjoint).
+The hooks assume that the sea-ice state, the ice-ocean forcing and the ocean
+velocity depend on the control variables, and that the constant fields
+``tensileStrFac``, ``denom1/2``, ``evpAlphaC/Z`` and ``evpBetaU/V`` do not. If
+the tool finds a different activity, the hook stops at its first call with an
+error message.
+
+The method covers mEVP with :varlink:`SEAICEuseEVPrev` ``= .TRUE.`` and the
+elliptical yield curve with normal flow rule. :filelink:`seaice_check.F
+<pkg/seaice/seaice_check.F>` stops for aEVP (:varlink:`SEAICEaEVPcoeff`),
+:varlink:`SEAICEuseEVPrev` ``= .FALSE.``, :varlink:`SEAICE_evpAreaReg`
+:math:`> 0`, :varlink:`SEAICEuseTEM`, :varlink:`SEAICEetaZmethod` other than 0
+or 3, :varlink:`SEAICE_2ndOrderBC`, :varlink:`SEAICEbasalDragK2` :math:`> 0`,
+and for the CPP options :varlink:`SEAICE_ALLOW_SIDEDRAG`,
+:varlink:`SEAICE_ALLOW_MOM_ADVECTION`, :varlink:`SEAICE_ALLOW_CLIPZETA`,
+:varlink:`SEAICE_EVP_ELIMINATE_UNDERFLOWS`, :varlink:`SEAICE_ITD`,
+:varlink:`SEAICE_DELTA_SMOOTHREG`, :varlink:`SEAICE_DYN_STABLE_ADJOINT`, and
+:filelink:`pkg/obcs` without ``OBCS_UVICE_OLD``. The adjoint of the exchange
+is implemented for :filelink:`pkg/exch2` only.
+
+**Exact replay (a check).** With :varlink:`SEAICE_fpExactReplay` ``= .TRUE.``
+the same code computes the exact adjoint of the loop: each subcycle
+:math:`k = N,\dots,1` is transposed at its own state :math:`x_{k-1}`
+(recomputed from the loop's input, which costs :math:`N(N-1)/2` extra
+subcycles per time step), with :math:`\theta = 1`, no raise, no frozen drag
+and :math:`\omega = 1`. The gradient must then equal the one with
+:varlink:`SEAICEuseEVPfixedPointAdj` ``= .FALSE.`` to round-off. This tests the
+hook (argument list, the adjoint of the exchange, the recomputation) for a
+given set-up and AD tool.
+
+.. csv-table:: Run-time parameters of the fixed-point adjoint (``data.seaice``, namelist SEAICE_PARM01).
+   :header: "Name", "Default", "Description"
+   :widths: 25, 12, 63
+   :name: tab_phys_pkg_seaice_fpadj
+
+   :varlink:`SEAICEuseEVPfixedPointAdj`, FALSE, use the fixed-point adjoint of the mEVP subcycle loop
+   :varlink:`SEAICE_fpTheta`, 0.97, weight :math:`\theta` of :math:`\partial\zeta/\partial\Delta` in the modified subcycle
+   :varlink:`SEAICE_fpOmega`, 0.9, relaxation weight :math:`\omega` of the transposed iteration (1: none)
+   :varlink:`SEAICE_fpKappa0`, 0.0, bound :math:`\kappa_0` of the raise of :math:`\alpha` and :math:`\beta`; :math:`\le 0`: :math:`4/c` with :math:`c = 4 (1+e^{-2}) A_c (\Delta x^{-2} + \Delta y^{-2})` at each grid point
+   :varlink:`SEAICE_fpRigidDelta`, 1.0E-08, :math:`\Delta` (s\ :sup:`-1`) below which a grid point counts as near rigid
+   :varlink:`SEAICE_fpThetaRigid`, 0.0, :math:`\theta` at near-rigid points
+   :varlink:`SEAICE_fpThinArea`, 0.01, ice concentration below which the drag coefficient is frozen
+   :varlink:`SEAICE_fpThinMass`, 9.0, ice mass per area (kg/m\ :sup:`2`) below which the drag coefficient is frozen
+   :varlink:`SEAICE_fpRaise`, TRUE, raise :math:`\alpha` and :math:`\beta` where needed
+   :varlink:`SEAICE_fpPrLive`, FALSE, replacement pressure from the current instead of the frozen :math:`\Delta`
+   :varlink:`SEAICE_fpExactReplay`, FALSE, compute the exact adjoint of the loop instead (check)
+   :varlink:`SEAICE_fpExchAdj`, 1, adjoint of the exchange: 1 = the one the AD tools use; 2 = a variant that is the exact transpose also where halo regions overlap at cube corners
 
 .. _para_phys_pkg_seaice_iceoceanstress:
 
