@@ -137,6 +137,11 @@ C     Many compilers can handle this more efficiently with the help of a flag.
 
 C     Include code to print residual of EVP iteration for debugging/diagnostics
 #  undef ALLOW_SEAICE_EVP_RESIDUAL
+
+C     Include the hand-written fixed-point adjoint of the mEVP subcycle loop
+C     (runtime flag SEAICEuseEVPfixedPointAdj); used only by adjoint builds
+C     (TAF and Tapenade), where it replaces the AD tool's adjoint of the loop
+#  undef SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ
 # endif /* SEAICE_ALLOW_EVP */
 
 C     smooth regularization (without max-function) of delta for

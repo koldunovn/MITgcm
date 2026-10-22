@@ -22,6 +22,12 @@ C                          one 1/e^2 in equations for sigma2 and sigma12
 C     SEAICEuseEVPpickup :: Set to false in order to start EVP solver with
 C                          non-EVP pickup files.  Default is true.
 C                          Applied only if SEAICEuseEVP=.TRUE.
+C     SEAICEuseEVPfixedPointAdj :: If true, the adjoint of the mEVP subcycle
+C                          loop is the hand-written fixed-point adjoint
+C                          (S/R SEAICE_EVP_SUBCYCLES_FPADJ_AD) instead of
+C                          the AD tool's; the forward is unchanged.
+C                          Needs SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ. Default
+C                          is false.
 C     SEAICEuseMultiTileSolver :: in LSR, use full domain tri-diagonal solver
 C     SEAICEuseLSR      :: If true, use default Picard solver with Line-
 C                          Successive(-over)-Relaxation, can also be true
@@ -131,7 +137,7 @@ C     SEAICE_mon_mnc    :: write monitor to netcdf file
       LOGICAL
      &     SEAICEuseDYNAMICS, SEAICEuseFREEDRIFT, SEAICEuseStrImpCpl,
      &     SEAICEuseEVP, SEAICEuseEVPstar, SEAICEuseEVPrev,
-     &     SEAICEuseEVPpickup,
+     &     SEAICEuseEVPpickup, SEAICEuseEVPfixedPointAdj,
      &     SEAICEuseMultiTileSolver,
      &     SEAICEuseLSR, SEAICEuseLSRflex, SEAICEuseKrylov,
      &     SEAICEuseJFNK, SEAICEuseIMEX, SEAICEuseBDF2,
@@ -161,7 +167,7 @@ C     SEAICE_mon_mnc    :: write monitor to netcdf file
       COMMON /SEAICE_PARM_L/
      &     SEAICEuseDYNAMICS, SEAICEuseFREEDRIFT, SEAICEuseStrImpCpl,
      &     SEAICEuseEVP, SEAICEuseEVPstar, SEAICEuseEVPrev,
-     &     SEAICEuseEVPpickup,
+     &     SEAICEuseEVPpickup, SEAICEuseEVPfixedPointAdj,
      &     SEAICEuseMultiTileSolver,
      &     SEAICEuseLSR, SEAICEuseLSRflex, SEAICEuseKrylov,
      &     SEAICEuseJFNK, SEAICEuseIMEX, SEAICEuseBDF2,
@@ -319,6 +325,49 @@ C
      &     SEAICEetaZmethod,
      &     SEAICE_debugPointI,
      &     SEAICE_debugPointJ
+
+C--   COMMON /SEAICE_FPADJ_R/, /SEAICE_FPADJ_L/, /SEAICE_FPADJ_I/
+C     Parameters of the fixed-point adjoint of the mEVP subcycle loop
+C     (SEAICEuseEVPfixedPointAdj = .TRUE.; read only by the adjoint)
+C     SEAICE_fpTheta      :: fraction of d(zeta)/d(Delta) kept in the
+C                            modified subcycle (default 0.97)
+C     SEAICE_fpOmega      :: relaxation weight of the transposed fixed-point
+C                            iteration (default 0.9; 1: no relaxation)
+C     SEAICE_fpKappa0     :: bound kappa0 of the stability raise of alpha
+C                            and beta; <= 0 (default): 4/c at each C point,
+C                            with c = 4 (1+1/e^2) rA (1/dxF^2 + 1/dyF^2)
+C     SEAICE_fpRigidDelta :: Delta (1/s) below which a C point counts as
+C                            near rigid (default 1e-8; 0: none)
+C     SEAICE_fpThetaRigid :: theta at the near-rigid C points (default 0)
+C     SEAICE_fpThinArea   :: AREA below which the ice counts as thin: there
+C                            the ocean drag coefficient DWATN is frozen
+C                            (default 0.01)
+C     SEAICE_fpThinMass   :: ice mass per area seaiceMassC (kg/m^2) below
+C                            which the ice counts as thin (default 9)
+C     SEAICE_fpRaise      :: raise alpha and beta where needed (default
+C                            .TRUE.)
+C     SEAICE_fpPrLive     :: replacement pressure from the live Delta
+C                            (default .FALSE.: from the frozen Delta)
+C     SEAICE_fpExactReplay :: check mode: the exact adjoint of the loop,
+C                            computed by the same code (default .FALSE.)
+C     SEAICE_fpExchAdj    :: adjoint of the exchange at the end of each
+C                            subcycle: 1 (default) = the adjoint the AD
+C                            tools use (EXCH2_RL2_CUBE_AD), 2 = a copy of
+C                            it that is the exact transpose also where
+C                            neighbour halo regions overlap at cube corners
+      _RL SEAICE_fpTheta, SEAICE_fpOmega, SEAICE_fpKappa0
+      _RL SEAICE_fpRigidDelta, SEAICE_fpThetaRigid
+      _RL SEAICE_fpThinArea, SEAICE_fpThinMass
+      COMMON /SEAICE_FPADJ_R/
+     &     SEAICE_fpTheta, SEAICE_fpOmega, SEAICE_fpKappa0,
+     &     SEAICE_fpRigidDelta, SEAICE_fpThetaRigid,
+     &     SEAICE_fpThinArea, SEAICE_fpThinMass
+      LOGICAL SEAICE_fpRaise, SEAICE_fpPrLive, SEAICE_fpExactReplay
+      COMMON /SEAICE_FPADJ_L/
+     &     SEAICE_fpRaise, SEAICE_fpPrLive, SEAICE_fpExactReplay
+      INTEGER SEAICE_fpExchAdj
+      COMMON /SEAICE_FPADJ_I/
+     &     SEAICE_fpExchAdj
 
 C--   COMMON /SEAICE_PARM_C/ Character valued sea ice model parameters.
 C     AreaFile       :: File containing initial sea-ice concentration

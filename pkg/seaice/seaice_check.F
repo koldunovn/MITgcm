@@ -5,6 +5,9 @@
 #ifdef ALLOW_AUTODIFF
 # include "AUTODIFF_OPTIONS.h"
 #endif
+#ifdef ALLOW_OBCS
+# include "OBCS_OPTIONS.h"
+#endif
 
 CBOP
 C     !ROUTINE: SEAICE_CHECK
@@ -916,6 +919,95 @@ C--   Check Overlap size:
         errCount = errCount + 1
        ENDIF
 # endif /* SEAICE_ALLOW_EVP */
+
+C--   Fixed-point adjoint of the mEVP subcycle loop
+#ifdef SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ
+       IF ( SEAICEuseEVPfixedPointAdj .AND. .NOT.SEAICEuseEVP ) THEN
+        WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: ',
+     &       'SEAICEuseEVPfixedPointAdj = .TRUE. needs SEAICEuseEVP'
+        CALL PRINT_ERROR( msgBuf, myThid )
+        errCount = errCount + 1
+       ENDIF
+C     The method covers mEVP (SEAICEuseEVPrev, constant alpha and beta)
+C     with the elliptical yield curve and the normal flow rule (eccfr =
+C     eccen is checked above), and the code of the modified subcycle in
+C     seaice_evp_fp_subcycle.F
+       IF ( SEAICEuseEVP .AND. SEAICEuseEVPfixedPointAdj ) THEN
+        IF ( SEAICEaEvpCoeff .NE. UNSET_RL
+     &       .OR. .NOT.SEAICEuseEVPrev
+     &       .OR. SEAICE_evpAreaReg .GT. 0. _d 0
+     &       .OR. SEAICEuseTEM ) THEN
+         WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: ',
+     &        'SEAICEuseEVPfixedPointAdj = .TRUE. covers only mEVP'
+         CALL PRINT_ERROR( msgBuf, myThid )
+         WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: with SEAICEuseEVPrev, ',
+     &        'no SEAICEaEvpCoeff, SEAICE_evpAreaReg, SEAICEuseTEM'
+         CALL PRINT_ERROR( msgBuf, myThid )
+         errCount = errCount + 1
+        ENDIF
+        IF ( ( SEAICEetaZmethod.NE.0 .AND. SEAICEetaZmethod.NE.3 )
+     &       .OR. ( SEAICE_no_slip .AND. SEAICE_2ndOrderBC )
+#ifdef SEAICE_ALLOW_BOTTOMDRAG
+     &       .OR. SEAICEbasalDragK2 .GT. 0. _d 0
+#endif
+     &     ) THEN
+         WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: ',
+     &        'SEAICEuseEVPfixedPointAdj = .TRUE. needs'
+         CALL PRINT_ERROR( msgBuf, myThid )
+         WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: SEAICEetaZmethod 0 or 3, ',
+     &        'no SEAICE_2ndOrderBC, no SEAICEbasalDragK2 > 0'
+         CALL PRINT_ERROR( msgBuf, myThid )
+         errCount = errCount + 1
+        ENDIF
+        IF ( SEAICE_fpTheta .LT. 0. _d 0
+     &       .OR. SEAICE_fpTheta .GT. 1. _d 0
+     &       .OR. SEAICE_fpThetaRigid .LT. 0. _d 0
+     &       .OR. SEAICE_fpThetaRigid .GT. 1. _d 0
+     &       .OR. SEAICE_fpOmega .LE. 0. _d 0
+     &       .OR. SEAICE_fpOmega .GT. 1. _d 0
+     &       .OR. SEAICE_fpRigidDelta .LT. 0. _d 0 ) THEN
+         WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: SEAICE_fpTheta, ',
+     &        'SEAICE_fpThetaRigid in [0,1], SEAICE_fpOmega in (0,1],'
+         CALL PRINT_ERROR( msgBuf, myThid )
+         WRITE(msgBuf,'(A)')
+     &        'SEAICE_CHECK: SEAICE_fpRigidDelta >= 0 are required'
+         CALL PRINT_ERROR( msgBuf, myThid )
+         errCount = errCount + 1
+        ENDIF
+        IF ( SEAICE_fpExchAdj.NE.1 .AND. SEAICE_fpExchAdj.NE.2 ) THEN
+         WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: ',
+     &        'SEAICE_fpExchAdj must be 1 or 2'
+         CALL PRINT_ERROR( msgBuf, myThid )
+         errCount = errCount + 1
+        ENDIF
+#if (defined SEAICE_ALLOW_SIDEDRAG || defined SEAICE_ALLOW_MOM_ADVECTION \
+  || defined SEAICE_ALLOW_CLIPZETA || defined SEAICE_EVP_ELIMINATE_UNDERFLOWS \
+  || defined SEAICE_ITD || defined SEAICE_DELTA_SMOOTHREG \
+  || defined SEAICE_DYN_STABLE_ADJOINT \
+  || ( defined ALLOW_OBCS && !defined OBCS_UVICE_OLD ))
+        WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: ',
+     &       'SEAICEuseEVPfixedPointAdj = .TRUE. does not cover'
+        CALL PRINT_ERROR( msgBuf, myThid )
+        WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: SIDEDRAG, MOM_ADVECTION, ',
+     &       'CLIPZETA, ELIMINATE_UNDERFLOWS, ITD, DELTA_SMOOTHREG,'
+        CALL PRINT_ERROR( msgBuf, myThid )
+        WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: DYN_STABLE_ADJOINT, ',
+     &       'OBCS without OBCS_UVICE_OLD (SEAICE_OPTIONS.h)'
+        CALL PRINT_ERROR( msgBuf, myThid )
+        errCount = errCount + 1
+#endif
+       ENDIF
+#else /* SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ */
+       IF ( SEAICEuseEVPfixedPointAdj ) THEN
+        WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: ',
+     &       'SEAICEuseEVPfixedPointAdj = .TRUE., but cpp-flag'
+        CALL PRINT_ERROR( msgBuf, myThid )
+        WRITE(msgBuf,'(2A)') 'SEAICE_CHECK: ',
+     &       'SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ is not defined'
+        CALL PRINT_ERROR( msgBuf, myThid )
+        errCount = errCount + 1
+       ENDIF
+#endif /* SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ */
 
 #ifndef SEAICE_ALLOW_LSR_FLEX
       IF ( SEAICEuseLSRflex ) THEN

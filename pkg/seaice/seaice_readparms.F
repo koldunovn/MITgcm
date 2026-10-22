@@ -195,7 +195,12 @@ C--   SEAICE parameters
      & MAX_HEFF, MIN_ATEMP, MIN_LWDOWN, MAX_TICE, MIN_TICE,
      & SEAICE_EPS, SEAICE_EPS_SQ,
      & SEAICEwriteState, SEAICEuseEVPpickup,
-     & SEAICEuseEVPstar, SEAICEuseEVPrev,
+     & SEAICEuseEVPstar, SEAICEuseEVPrev, SEAICEuseEVPfixedPointAdj,
+     & SEAICE_fpTheta, SEAICE_fpOmega, SEAICE_fpKappa0,
+     & SEAICE_fpRigidDelta, SEAICE_fpThetaRigid,
+     & SEAICE_fpThinArea, SEAICE_fpThinMass,
+     & SEAICE_fpRaise, SEAICE_fpPrLive, SEAICE_fpExactReplay,
+     & SEAICE_fpExchAdj,
      & SEAICE_monFreq, SEAICE_dumpFreq, SEAICE_taveFreq,
      & SEAICE_tave_mnc, SEAICE_dump_mnc, SEAICE_mon_mnc,
 #ifdef SEAICE_ITD
@@ -261,6 +266,18 @@ C--   set default sea ice parameters
       SEAICEuseEVPpickup = .TRUE.
       SEAICEuseEVPstar   = .TRUE.
       SEAICEuseEVPrev    = .TRUE.
+      SEAICEuseEVPfixedPointAdj = .FALSE.
+      SEAICE_fpTheta      = 0.97 _d 0
+      SEAICE_fpOmega      = 0.9 _d 0
+      SEAICE_fpKappa0     = 0. _d 0
+      SEAICE_fpRigidDelta = 1. _d -8
+      SEAICE_fpThetaRigid = 0. _d 0
+      SEAICE_fpThinArea   = 0.01 _d 0
+      SEAICE_fpThinMass   = 9. _d 0
+      SEAICE_fpRaise      = .TRUE.
+      SEAICE_fpPrLive     = .FALSE.
+      SEAICE_fpExactReplay = .FALSE.
+      SEAICE_fpExchAdj    = 1
       SEAICErestoreUnderIce = .FALSE.
       SEAICE_growMeltByConv = .FALSE.
       SEAICE_salinityTracer = .FALSE.

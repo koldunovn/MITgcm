@@ -309,6 +309,42 @@ C--  Seaice-Dynamics parameters
      & 'SEAICEuseEVPpickup=', ' /* start EVP solver with EVP pickup*/')
        CALL WRITE_0D_RL ( SEAICE_evpAreaReg, INDEX_NONE,
      & 'SEAICE_evpAreaReg   =', ' /* EVP DenomU/V regularizations*/')
+#ifdef SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ
+       CALL WRITE_0D_L ( SEAICEuseEVPfixedPointAdj, INDEX_NONE,
+     & 'SEAICEuseEVPfixedPointAdj =',
+     & ' /* fixed-point adjoint of mEVP loop */')
+       IF ( SEAICEuseEVPfixedPointAdj ) THEN
+        CALL WRITE_0D_RL( SEAICE_fpTheta, INDEX_NONE,
+     & 'SEAICE_fpTheta    =', ' /* fixed-point adj.: theta */')
+        CALL WRITE_0D_RL( SEAICE_fpOmega, INDEX_NONE,
+     & 'SEAICE_fpOmega    =', ' /* fixed-point adj.: omega */')
+        CALL WRITE_0D_RL( SEAICE_fpKappa0, INDEX_NONE,
+     & 'SEAICE_fpKappa0   =', ' /* fixed-point adj.: kappa0 */')
+        CALL WRITE_0D_RL( SEAICE_fpRigidDelta, INDEX_NONE,
+     & 'SEAICE_fpRigidDelta =',
+     & ' /* fixed-point adj.: near-rigid Delta (1/s) */')
+        CALL WRITE_0D_RL( SEAICE_fpThetaRigid, INDEX_NONE,
+     & 'SEAICE_fpThetaRigid =',
+     & ' /* fixed-point adj.: theta where near rigid */')
+        CALL WRITE_0D_RL( SEAICE_fpThinArea, INDEX_NONE,
+     & 'SEAICE_fpThinArea =', ' /* fixed-point adj.: thin-ice AREA */')
+        CALL WRITE_0D_RL( SEAICE_fpThinMass, INDEX_NONE,
+     & 'SEAICE_fpThinMass =',
+     & ' /* fixed-point adj.: thin-ice mass (kg/m^2) */')
+        CALL WRITE_0D_L ( SEAICE_fpRaise, INDEX_NONE,
+     & 'SEAICE_fpRaise    =',
+     & ' /* fixed-point adj.: raise alpha, beta */')
+        CALL WRITE_0D_L ( SEAICE_fpPrLive, INDEX_NONE,
+     & 'SEAICE_fpPrLive   =',
+     & ' /* fixed-point adj.: live replacement pressure */')
+        CALL WRITE_0D_L ( SEAICE_fpExactReplay, INDEX_NONE,
+     & 'SEAICE_fpExactReplay =',
+     & ' /* fixed-point adj.: exact replay (check) */')
+        CALL WRITE_0D_I ( SEAICE_fpExchAdj, INDEX_NONE,
+     & 'SEAICE_fpExchAdj  =',
+     & ' /* fixed-point adj.: exchange adjoint (1,2) */')
+       ENDIF
+#endif /* SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ */
 #endif /* SEAICE_ALLOW_EVP */
       ENDIF
 

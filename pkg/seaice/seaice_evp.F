@@ -7,6 +7,7 @@
 #ifdef ALLOW_AUTODIFF
 # include "AUTODIFF_OPTIONS.h"
 #endif
+#include "AD_CONFIG.h"
 
 CBOP
 C     !ROUTINE: SEAICE_EVP
@@ -262,6 +263,30 @@ CML     &      /SEAICE_deltaTevp**2
 #endif /* SEAICE_ALLOW_CLIPZETA */
 C
 C     the subcycle loop
+#if ( defined SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ \
+  && !defined ALLOW_TANGENTLINEAR_RUN )
+      IF ( SEAICEuseEVPfixedPointAdj ) THEN
+C     the same loop through a wrapper, whose adjoint is the hand-written
+C     fixed-point adjoint (seaice_evp_subcycles_fpadj_ad.F); the tangent
+C     linear model always uses the AD tool's derivative of the loop
+       CALL SEAICE_EVP_SUBCYCLES_FPADJ(
+     U      uIce, vIce,
+     U      seaice_sigma1, seaice_sigma2, seaice_sigma12,
+     U      e11, e22, e12, zetaZ, deltaC,
+     U      stressDivergenceX, stressDivergenceY, DWATN,
+     U      FORCEX, FORCEY, press, zeta, eta,
+     I      denom1, denom2, evpAlphaC, evpAlphaZ, evpBetaU, evpBetaV,
+     I      press0, tensileStrFac,
+     I      seaiceMassC, seaiceMassU, seaiceMassV,
+     I      FORCEX0, FORCEY0, uIceNm1, vIceNm1,
+     I      uVel, vVel, HEFF, AREA, areaW, areaS,
+     I      kSrf, nEVPstep, COSWAT, SINWAT,
+     I      ecc2, recip_ecc2, deltaMinSq,
+     I      evpStarFac, evpRevFac, recip_evpRevFac, recip_deltaT,
+     I      EVPcFac, useAdaptiveEVP,
+     I      myTime, myIter, myThid )
+      ELSE
+#endif /* SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ and not TLM */
       CALL SEAICE_EVP_SUBCYCLES(
      U     uIce, vIce,
      U     seaice_sigma1, seaice_sigma2, seaice_sigma12,
@@ -298,6 +323,10 @@ C     the subcycle loop
      I     printResidual,
 #endif
      I     myTime, myIter, myThid )
+#if ( defined SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ \
+  && !defined ALLOW_TANGENTLINEAR_RUN )
+      ENDIF
+#endif
 
 #endif /* SEAICE_CGRID and SEAICE_ALLOW_EVP */
 
