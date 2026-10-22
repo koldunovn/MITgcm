@@ -269,6 +269,30 @@ C     the subcycle loop
 C     the same loop through a wrapper, whose adjoint is the hand-written
 C     fixed-point adjoint (seaice_evp_subcycles_fpadj_ad.F); the tangent
 C     linear model always uses the AD tool's derivative of the loop
+#ifdef ALLOW_AUTODIFF_TAMC
+C     the hand-written adjoint reruns the loop from the values of the
+C     arguments at the entry of the call (DEPEND in seaice.flow)
+CADJ STORE uice, vice = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE seaice_sigma1  = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE seaice_sigma2  = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE seaice_sigma12 = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE e11, e22, e12  = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE zetaz, deltac  = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE stressDivergenceX = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE stressDivergenceY = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE dwatn, forcex, forcey = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE press, zeta, eta = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE denom1, denom2 = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE evpAlphaC, evpAlphaZ = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE evpBetaU, evpBetaV = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE press0, tensileStrFac = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE seaiceMassC = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE seaiceMassU = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE seaiceMassV = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE forcex0, forcey0 = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE uicenm1, vicenm1 = comlev1, key=ikey_dynamics, kind=isbyte
+CADJ STORE heff, area, areaW, areaS = comlev1, key=ikey_dynamics, kind=isbyte
+#endif /* ALLOW_AUTODIFF_TAMC */
        CALL SEAICE_EVP_SUBCYCLES_FPADJ(
      U      uIce, vIce,
      U      seaice_sigma1, seaice_sigma2, seaice_sigma12,

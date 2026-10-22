@@ -10,3 +10,35 @@ C----------------------------------------
 CADJ SUBROUTINE SEAICE_CHECK_PICKUP INPUT  = 1,2,3,4,5
 CADJ SUBROUTINE SEAICE_CHECK_PICKUP OUTPUT =
 
+C----------------------------------------
+C SUBROUTINE SEAICE_EVP_SUBCYCLES_FPADJ
+C----------------------------------------
+C     the fixed-point adjoint of the mEVP subcycle loop
+C     (SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ): TAF does not differentiate this
+C     wrapper of the loop, it calls the hand-written adjoint
+C     SEAICE_EVP_SUBCYCLES_FPADJ_MAD (seaice_evp_subcycles_fpadj_mad.F).
+C     Arguments (55): 1-18 the loop carry and outputs (uIce .. eta),
+C     19-24 denom1/2, evpAlphaC/Z, evpBetaU/V, 25 press0,
+C     26 tensileStrFac, 27-39 seaiceMassC/U/V, FORCEX0/Y0,
+C     uIceNm1/vIceNm1, uVel/vVel, HEFF, AREA, areaW/S, 40-52 scalars,
+C     53-55 myTime, myIter, myThid. The wrapper is not called in the
+C     tangent-linear model, so there is no FTLNAME.
+CADJ SUBROUTINE seaice_evp_subcycles_fpadj ADNAME =
+CADJ &          seaice_evp_subcycles_fpadj_mad
+CADJ SUBROUTINE seaice_evp_subcycles_fpadj INPUT  =
+CADJ &          1,2,3,4,5,6,7,8,9,10,11,12,13,14,
+CADJ &          15,16,17,18,19,20,21,22,23,24,25,26,27,28,
+CADJ &          29,30,31,32,33,34,35,36,37,38,39,40,41,42,
+CADJ &          43,44,45,46,47,48,49,50,51,52,53,54,55
+CADJ SUBROUTINE seaice_evp_subcycles_fpadj OUTPUT =
+CADJ &          1,2,3,4,5,6,7,8,9,10,11,12,13,14,
+CADJ &          15,16,17,18
+CADJ SUBROUTINE seaice_evp_subcycles_fpadj ACTIVE =
+CADJ &          1,2,3,4,5,6,7,8,9,10,11,12,13,14,
+CADJ &          15,16,17,18,25,27,28,29,30,31,32,33,34,35,
+CADJ &          36,37,38,39
+CADJ SUBROUTINE seaice_evp_subcycles_fpadj DEPEND =
+CADJ &          1,2,3,4,5,6,7,8,9,10,11,12,13,14,
+CADJ &          15,16,17,18,19,20,21,22,23,24,25,26,27,28,
+CADJ &          29,30,31,32,33,34,35,36,37,38,39,40,41,42,
+CADJ &          43,44,45,46,47,48,49,50,51,52,53,54,55
