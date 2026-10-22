@@ -96,53 +96,22 @@ C     betaFacU/V     :: analog betaFacP1U/V
 
       INTEGER i, j, bi, bj
       INTEGER kSrf
-      INTEGER nEVPstep, iEVPstep
-#ifndef ALLOW_AUTODIFF
-      INTEGER nEVPstepMax
-#endif
-#ifdef ALLOW_AUTODIFF_TAMC
-C     evpkey :: tape key (depends on evp iteration)
-C     tkey   :: tape key (depends on tile indices and evpkey)
-      INTEGER evpkey, tkey
-#endif
+      INTEGER nEVPstep
 
       _RL COSWAT
       _RS SINWAT
       _RL ecc2, recip_ecc2, recip_evpAlpha, recip_deltaT
       _RL betaFacP1, betaFac, evpStarFac, evpRevFac, recip_evpRevFac
 
-      _RL seaice_div    (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-      _RL seaice_tension(1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-      _RL seaice_shear  (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-      _RL sig11         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-      _RL sig22         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
 C     fractional area at velocity points
       _RL areaW         (1:sNx,1:sNy,nSx,nSy)
       _RL areaS         (1:sNx,1:sNy,nSx,nSy)
-C     auxilliary variables
-      _RL ep            (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-      _RL em            (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-      _RL e12Csq        (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-      _RL pressC        (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-      _RL zetaC         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-      _RL deltaZ        (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-C     _RL zetaZ         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-#ifdef SEAICE_ALLOW_MOM_ADVECTION
-C     tendency due to advection of momentum
-      _RL gUmom         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-      _RL gVmom         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
-#endif /*  SEAICE_ALLOW_MOM_ADVECTION */
-      _RL deltaCreg, deltaSq, deltaMinSq, tmp
-#ifdef SEAICE_ALLOW_TEM
-      _RL etaDenC, zetaMaxC, etaDenZ, zetaMaxZ
-#endif /* SEAICE_ALLOW_TEM */
+      _RL deltaMinSq
 #ifdef SEAICE_ALLOW_CLIPZETA
-      _RL zMaxZ, zMinZ, fac
+      _RL fac
 #endif /* SEAICE_ALLOW_CLIPZETA */
       _RL denom1   (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
       _RL denom2   (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
-      _RL sumNorm, denomU, denomV
-      _RL locMaskU, locMaskV
       _RL EVPcFac
       _RL evpAlphaC(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
       _RL evpAlphaZ(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
@@ -153,14 +122,6 @@ C     tendency due to advection of momentum
       LOGICAL useAdaptiveEVP
 
 #ifdef ALLOW_SEAICE_EVP_RESIDUAL
-      _RL resTile(nSx,nSy)
-      _RL resLoc
-      _RL uIcePm1 (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
-      _RL vIcePm1 (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
-      _RL sig11pm1(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
-      _RL sig22pm1(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
-      _RL sig12pm1(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
-
       LOGICAL printResidual
 C     CHARACTER*(10) suff
 C     !FUNCTIONS:
@@ -242,9 +203,6 @@ C
       betaFacP1  = betaFac + evpStarFac*recip_deltaT
       betaFacP1U = betaFacP1
       betaFacP1V = betaFacP1
-#ifndef ALLOW_AUTODIFF
-      nEVPstepMax = nEVPstep
-#endif
 
       DO bj=myByLo(myThid),myByHi(myThid)
        DO bi=myBxLo(myThid),myBxHi(myThid)
@@ -303,6 +261,298 @@ CML     &      /SEAICE_deltaTevp**2
       ENDIF
 #endif /* SEAICE_ALLOW_CLIPZETA */
 C
+C     the subcycle loop
+      CALL SEAICE_EVP_SUBCYCLES(
+     U     uIce, vIce,
+     U     seaice_sigma1, seaice_sigma2, seaice_sigma12,
+     O     e11, e22, e12, zetaZ, deltaC,
+     O     stressDivergenceX, stressDivergenceY,
+     O     DWATN,
+#ifdef SEAICE_ALLOW_BOTTOMDRAG
+     O     CbotC,
+#endif
+#ifdef SEAICE_ALLOW_SIDEDRAG
+     O     sideDragU, sideDragV,
+#endif
+     O     FORCEX, FORCEY, press, zeta, eta,
+     U     denom1, denom2, evpAlphaC, evpAlphaZ, evpBetaU, evpBetaV,
+     I     press0, tensileStrFac,
+     I     seaiceMassC, seaiceMassU, seaiceMassV,
+     I     FORCEX0, FORCEY0, uIceNm1, vIceNm1,
+     I     uVel, vVel, HEFF, AREA,
+#ifdef SEAICE_ITD
+     I     HEFFITD, AREAITD,
+#endif
+#ifdef SEAICE_ALLOW_SIDEDRAG
+     I     coastRoughU, coastRoughV,
+#endif
+#ifdef SEAICE_ALLOW_CLIPZETA
+     I     SEAICE_zMin, SEAICE_zMax,
+#endif
+     I     areaW, areaS,
+     I     kSrf, nEVPstep, COSWAT, SINWAT,
+     I     ecc2, recip_ecc2, deltaMinSq,
+     I     evpStarFac, evpRevFac, recip_evpRevFac, recip_deltaT,
+     I     EVPcFac, useAdaptiveEVP,
+#ifdef ALLOW_SEAICE_EVP_RESIDUAL
+     I     printResidual,
+#endif
+     I     myTime, myIter, myThid )
+
+#endif /* SEAICE_CGRID and SEAICE_ALLOW_EVP */
+
+      RETURN
+      END
+
+C---+----1----+----2----+----3----+----4----+----5----+----6----+----7-|--+----|
+CBOP
+C     !ROUTINE: SEAICE_EVP_SUBCYCLES
+C     !INTERFACE:
+      SUBROUTINE SEAICE_EVP_SUBCYCLES(
+     U     uIce, vIce,
+     U     seaice_sigma1, seaice_sigma2, seaice_sigma12,
+     O     e11, e22, e12, zetaZ, deltaC,
+     O     stressDivergenceX, stressDivergenceY,
+     O     DWATN,
+#ifdef SEAICE_ALLOW_BOTTOMDRAG
+     O     CbotC,
+#endif
+#ifdef SEAICE_ALLOW_SIDEDRAG
+     O     sideDragU, sideDragV,
+#endif
+     O     FORCEX, FORCEY, press, zeta, eta,
+     U     denom1, denom2, evpAlphaC, evpAlphaZ, evpBetaU, evpBetaV,
+     I     press0, tensileStrFac,
+     I     seaiceMassC, seaiceMassU, seaiceMassV,
+     I     FORCEX0, FORCEY0, uIceNm1, vIceNm1,
+     I     uVel, vVel, HEFF, AREA,
+#ifdef SEAICE_ITD
+     I     HEFFITD, AREAITD,
+#endif
+#ifdef SEAICE_ALLOW_SIDEDRAG
+     I     coastRoughU, coastRoughV,
+#endif
+#ifdef SEAICE_ALLOW_CLIPZETA
+     I     SEAICE_zMin, SEAICE_zMax,
+#endif
+     I     areaW, areaS,
+     I     kSrf, nEVPstep, COSWAT, SINWAT,
+     I     ecc2, recip_ecc2, deltaMinSq,
+     I     evpStarFac, evpRevFac, recip_evpRevFac, recip_deltaT,
+     I     EVPcFac, useAdaptiveEVP,
+#ifdef ALLOW_SEAICE_EVP_RESIDUAL
+     I     printResidual,
+#endif
+     I     myTime, myIter, myThid )
+
+C     !DESCRIPTION: \bv
+C     *==========================================================*
+C     | SUBROUTINE SEAICE_EVP_SUBCYCLES
+C     | o The subcycle loop of the EVP solver (SEAICE_EVP),
+C     |   moved here unchanged so that the whole loop is one
+C     |   routine with every field it reads or writes as an
+C     |   argument, so that it is a unit whose adjoint can be
+C     |   replaced by a hand-written one.
+C     *==========================================================*
+C     \ev
+
+C     !USES:
+      IMPLICIT NONE
+
+C     === Global variables ===
+#include "SIZE.h"
+#include "EEPARAMS.h"
+#include "PARAMS.h"
+#include "GRID.h"
+#include "SEAICE_SIZE.h"
+#include "SEAICE_PARAMS.h"
+#include "SEAICE_GRID.h"
+
+#ifdef ALLOW_AUTODIFF_TAMC
+# include "tamc.h"
+#endif
+
+C     !INPUT/OUTPUT PARAMETERS:
+C     === Routine arguments ===
+C     Every field the subcycle loop of SEAICE_EVP reads or writes is an
+C     argument (none passes through COMMON); the dummy arguments keep
+C     the names of their COMMON blocks (SEAICE.h, DYNVARS.h) or of the
+C     local variables of SEAICE_EVP, so that the loop is literally the
+C     one of SEAICE_EVP; SEAICE.h and DYNVARS.h are not included here.
+C     (the callees SEAICE_OCEANDRAG_COEFFS and SEAICE_BOTTOMDRAG_COEFFS
+C     still read uVel/vVel from DYNVARS.h; the loop never writes
+C     them)
+C     loop carry (read and written):
+C     uIce, vIce     :: ice velocity (SEAICE.h)
+C     seaice_sigma1/2/12 :: EVP stresses (SEAICE.h)
+C     written:
+C     e11, e22, e12  :: strain rates (SEAICE.h)
+C     zetaZ, deltaC  :: bulk viscosity at Z points, Delta at C points
+C     stressDivergenceX/Y :: divergence of the stress tensor
+C     DWATN          :: ocean drag coefficient (SEAICE.h)
+C     CbotC          :: bottom drag coefficient (SEAICE.h)
+C     sideDragU/V    :: side drag (SEAICE.h)
+C     FORCEX, FORCEY :: forcing of the momentum equations (SEAICE.h)
+C     press, zeta, eta :: pressure, viscosities (diagnostics, SEAICE.h)
+C     denom1, denom2, evpAlphaC/Z, evpBetaU/V :: fields of SEAICE_EVP,
+C                       changed in the loop only with adaptive EVP
+C     read:
+C     press0, tensileStrFac, seaiceMassC/U/V, FORCEX0, FORCEY0,
+C     uIceNm1, vIceNm1, HEFF, AREA, HEFFITD, AREAITD, coastRoughU/V,
+C     SEAICE_zMin/zMax :: SEAICE.h fields
+C     uVel, vVel     :: ocean velocity (DYNVARS.h)
+C     areaW, areaS   :: fractional area at velocity points (SEAICE_EVP)
+C     kSrf, nEVPstep, COSWAT, SINWAT, ecc2, recip_ecc2, deltaMinSq,
+C     evpStarFac, evpRevFac, recip_evpRevFac, recip_deltaT, EVPcFac,
+C     useAdaptiveEVP, printResidual :: scalars set in SEAICE_EVP
+C     myTime         :: Simulation time
+C     myIter         :: Simulation timestep number
+C     myThid         :: my Thread Id. number
+      _RL uIce          (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL vIce          (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL seaice_sigma1 (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL seaice_sigma2 (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL seaice_sigma12(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL e11           (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL e22           (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL e12           (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL zetaZ         (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL deltaC        (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL stressDivergenceX(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL stressDivergenceY(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL DWATN         (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+#ifdef SEAICE_ALLOW_BOTTOMDRAG
+      _RL CbotC         (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+#endif
+#ifdef SEAICE_ALLOW_SIDEDRAG
+      _RL sideDragU     (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL sideDragV     (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+#endif
+      _RL FORCEX        (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL FORCEY        (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL press         (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL zeta          (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL eta           (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL denom1        (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL denom2        (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL evpAlphaC     (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL evpAlphaZ     (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL evpBetaU      (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL evpBetaV      (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL press0        (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL tensileStrFac (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL seaiceMassC   (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL seaiceMassU   (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL seaiceMassV   (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL FORCEX0       (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL FORCEY0       (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL uIceNm1       (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL vIceNm1       (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL uVel          (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr,nSx,nSy)
+      _RL vVel          (1-OLx:sNx+OLx,1-OLy:sNy+OLy,Nr,nSx,nSy)
+      _RL HEFF          (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL AREA          (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+#ifdef SEAICE_ITD
+      _RL HEFFITD       (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nITD,nSx,nSy)
+      _RL AREAITD       (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nITD,nSx,nSy)
+#endif
+#ifdef SEAICE_ALLOW_SIDEDRAG
+      _RL coastRoughU   (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL coastRoughV   (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+#endif
+#ifdef SEAICE_ALLOW_CLIPZETA
+      _RL SEAICE_zMin   (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL SEAICE_zMax   (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+#endif
+      _RL areaW         (1:sNx,1:sNy,nSx,nSy)
+      _RL areaS         (1:sNx,1:sNy,nSx,nSy)
+      INTEGER kSrf
+      INTEGER nEVPstep
+      _RL COSWAT
+      _RS SINWAT
+      _RL ecc2, recip_ecc2, deltaMinSq
+      _RL evpStarFac, evpRevFac, recip_evpRevFac, recip_deltaT
+      _RL EVPcFac
+      LOGICAL useAdaptiveEVP
+#ifdef ALLOW_SEAICE_EVP_RESIDUAL
+      LOGICAL printResidual
+#endif
+      _RL     myTime
+      INTEGER myIter
+      INTEGER myThid
+
+#if ( defined SEAICE_CGRID &&  defined SEAICE_ALLOW_EVP )
+
+C     === Local variables ===
+C     i,j,bi,bj      :: Loop counters
+C     iEVPstep       :: Loop counter
+C     seaice_div     :: divergence strain rates at C-points times P
+C                       /divided by Delta minus 1
+C     seaice_tension :: tension    strain rates at C-points times P
+C                       /divided by Delta
+C     seaice_shear   :: shear      strain rates, defined at Z-points times P
+C                       /divided by Delta
+C     sig11, sig22   :: sum and difference of diagonal terms of stress tensor
+C     betaFacP1U/V   :: = betaFacP1 in standard case,
+C                          with varying beta in the adaptive case
+C                           on u and on v point
+C     betaFacU/V     :: analog betaFacP1U/V
+
+      INTEGER i, j, bi, bj
+      INTEGER iEVPstep
+#ifndef ALLOW_AUTODIFF
+      INTEGER nEVPstepMax
+#endif
+#ifdef ALLOW_AUTODIFF_TAMC
+C     evpkey :: tape key (depends on evp iteration)
+C     tkey   :: tape key (depends on tile indices and evpkey)
+      INTEGER evpkey, tkey
+#endif
+
+      _RL seaice_div    (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL seaice_tension(1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL seaice_shear  (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL sig11         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL sig22         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+C     auxilliary variables
+      _RL ep            (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL em            (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL e12Csq        (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL pressC        (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL zetaC         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL deltaZ        (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+C     _RL zetaZ         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+#ifdef SEAICE_ALLOW_MOM_ADVECTION
+C     tendency due to advection of momentum
+      _RL gUmom         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+      _RL gVmom         (1-OLx:sNx+OLx,1-OLy:sNy+OLy)
+#endif /*  SEAICE_ALLOW_MOM_ADVECTION */
+      _RL deltaCreg, deltaSq, tmp
+#ifdef SEAICE_ALLOW_TEM
+      _RL etaDenC, zetaMaxC, etaDenZ, zetaMaxZ
+#endif /* SEAICE_ALLOW_TEM */
+#ifdef SEAICE_ALLOW_CLIPZETA
+      _RL zMaxZ, zMinZ
+#endif /* SEAICE_ALLOW_CLIPZETA */
+      _RL sumNorm, denomU, denomV
+      _RL locMaskU, locMaskV
+      _RL betaFacP1U,  betaFacP1V
+      _RL betaFacU,    betaFacV
+
+#ifdef ALLOW_SEAICE_EVP_RESIDUAL
+      _RL resTile(nSx,nSy)
+      _RL resLoc
+      _RL uIcePm1 (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL vIcePm1 (1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL sig11pm1(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL sig22pm1(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+      _RL sig12pm1(1-OLx:sNx+OLx,1-OLy:sNy+OLy,nSx,nSy)
+#endif /* ALLOW_SEAICE_EVP_RESIDUAL */
+CEOP
+
+#ifndef ALLOW_AUTODIFF
+      nEVPstepMax = nEVPstep
+#endif
 C     start of the main time loop
       DO iEVPstep = 1, nEVPstepMax
        IF (iEVPstep.LE.nEVPstep) THEN
