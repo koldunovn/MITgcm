@@ -25,6 +25,10 @@ CADJ STORE stressDivergenceY = tapelev4, key = ilev_4
 CADJ STORE seaice_sigma1     = tapelev4, key = ilev_4
 CADJ STORE seaice_sigma2     = tapelev4, key = ilev_4
 CADJ STORE seaice_sigma12    = tapelev4, key = ilev_4
+#   ifdef SEAICE_ALLOW_EVP_FIXEDPOINT_ADJ
+CADJ STORE deltac,eta,forcex,forcey,press,zeta,zetaz
+CADJ &                       = tapelev4, key = ilev_4
+#   endif
 #  endif /* SEAICE_ALLOW_EVP */
 # endif /* SEAICE_CGRID */
 # ifdef SEAICE_VARIABLE_SALINITY
